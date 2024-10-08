@@ -1,0 +1,54 @@
+{
+  "name": "@wiajs/agent",
+  "description": "http/https/socks/tunnel/transfer's proxy agent",
+  "version": "1.0.10",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "types": {
+        "require": "./index.d.cts",
+        "default": "./index.d.ts"
+      },
+      "node": {
+        "require": "./dist/agent.cjs",
+        "default": "./index.js"
+      },
+      "default": {
+        "require": "./dist/agent.cjs",
+        "default": "./dist/agent.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production gulp build -f gulpfile.js",
+    "lib": "swc --config-file ./.swcrc ./src -d lib -w --strip-leading-paths",
+    "lint": "xo",
+    "test": "npm run test:node && npm run test:browser && npm run lint",
+    "test:node": "istanbul cover _mocha -- test.js test.node.js",
+    "test:browser": "karma start --single-run",
+    "test:coverage": "cat ./coverage/lcov.info | coveralls"
+  },
+  "keywords": ["agent", "proxy", "socks"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wiajs/agent"
+  },
+  "author": {
+    "name": "Sibyl Yu",
+    "email": "sibyl@wia.pub"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@wiajs/log": "^4.3.10"
+  },
+  "devDependencies": {},
+  "peerDependenciesMeta": {},
+  "engines": {
+    "node": ">=6.0"
+  }
+}
