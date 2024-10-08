@@ -1,1 +1,1 @@
-export {default} from './lib/index'
+export {default, HttpAgent, HttpsAgent} from './lib/index'
