@@ -1,12 +1,12 @@
-import * as dns from 'node:dns';
-import https from 'node:https';
-import http from 'node:http';
-import * as net from 'node:net';
-import * as tls from 'node:tls';
-import {log as Log, name} from '@wiajs/log';
-import {SocksClient} from 'socks';
+import * as dns from 'node:dns'
+import https from 'node:https'
+import http from 'node:http'
+import * as net from 'node:net'
+import * as tls from 'node:tls'
+import {log as Log, name} from '@wiajs/log'
+import {SocksClient} from 'socks'
 
-const log = Log({env: `wia:agent:${name(__filename)}`});
+const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
 /** @typedef {{protocol?: string, keepAlive: boolean} & import('net').TcpNetConnectOpts} HttpConnectOpts */
@@ -23,7 +23,7 @@ const log = Log({env: `wia:agent:${name(__filename)}`});
  */
 async function connect(opts, proxy, proxyOpts) {
   // @ts-ignore
-  let R = {socket: null, err: null};
+  let R = {socket: null, err: null}
   try {
     // log({proxy, proxyOpts}, 'connect')
 
@@ -45,59 +45,59 @@ async function connect(opts, proxy, proxyOpts) {
       },
       agent: false, // 单次有效，不复用
       timeout: opts.timeout || 0,
-    };
+    }
 
     // Basic proxy authorization
     if (proxy.username || proxy.password) {
       const base64 = Buffer.from(
         `${decodeURIComponent(proxy.username || '')}:${decodeURIComponent(proxy.password || '')}`
-      ).toString('base64');
-      connOpts.headers['proxy-authorization'] = `Basic ${base64}`;
+      ).toString('base64')
+      connOpts.headers['proxy-authorization'] = `Basic ${base64}`
     }
 
     // Necessary for the TLS check with the proxy to succeed.
-    if (proxy.protocol === 'https:') connOpts.servername = proxy.host;
+    if (proxy.protocol === 'https:') connOpts.servername = proxy.host
 
-    log({connOpts}, 'connect request');
+    log({connOpts}, 'connect request')
 
     R = await new Promise((resolve, reject) => {
       // 连接代理服务器
-      const request = (proxy.protocol === 'http:' ? http : https).request(connOpts);
+      const request = (proxy.protocol === 'http:' ? http : https).request(connOpts)
       request.once('connect', (response, socket, head) => {
-        request.removeAllListeners();
-        socket.removeAllListeners();
+        request.removeAllListeners()
+        socket.removeAllListeners()
         if (response.statusCode === 200) {
-          log('Tunnel proxy connect Success.');
-          resolve({socket, err: null});
+          log('Tunnel proxy connect Success.')
+          resolve({socket, err: null})
           // const secureSocket = super.createConnection({...opts, socket})
           // callback(null, secureSocket)
         } else {
-          socket.destroy();
-          resolve({socket: null, err: new Error(`Bad response: ${response.statusCode}`)});
+          socket.destroy()
+          resolve({socket: null, err: new Error(`Bad response: ${response.statusCode}`)})
           // callback(new Error(`Bad response: ${response.statusCode}`), null)
-          log.error('Tunnel proxy connect Fail.');
+          log.error('Tunnel proxy connect Fail.')
         }
-      });
+      })
 
       request.once('timeout', () => {
-        log.error('connect timeout');
-        request.destroy(new Error('Proxy timeout'));
-      });
+        log.error('connect timeout')
+        request.destroy(new Error('Proxy timeout'))
+      })
 
       request.once('error', err => {
-        request.removeAllListeners();
-        resolve({socket: null, err});
-        log.err(err, 'connect');
+        request.removeAllListeners()
+        resolve({socket: null, err})
+        log.err(err, 'connect')
         // callback(err, null)
-      });
-      request.end();
-    });
+      })
+      request.end()
+    })
   } catch (e) {
-    log.err(e, 'connect');
-    R.err = e;
+    log.err(e, 'connect')
+    R.err = e
   }
 
-  return R;
+  return R
 }
 
 /**
@@ -108,12 +108,12 @@ async function connect(opts, proxy, proxyOpts) {
  * @returns {Promise<net.Socket | tls.TLSSocket>}
  */
 async function socksConnect(opts, proxy, lookup = false) {
-  let R;
+  let R
   try {
-    const {timeout} = opts;
-    let {host, port} = opts;
-    port = typeof port === 'number' ? port : Number.parseInt(port);
-    const {lookup: lookupFn = dns.lookup} = opts;
+    const {timeout} = opts
+    let {host, port} = opts
+    port = typeof port === 'number' ? port : Number.parseInt(port)
+    const {lookup: lookupFn = dns.lookup} = opts
 
     if (lookup) {
       // Client-side DNS resolution for "4" and "5" socks proxy versions.
@@ -121,12 +121,12 @@ async function socksConnect(opts, proxy, lookup = false) {
         // Use the request's custom lookup, if one was configured:
         lookupFn(host, {}, (err, res) => {
           if (err) {
-            reject(err);
+            reject(err)
           } else {
-            resolve(res);
+            resolve(res)
           }
-        });
-      });
+        })
+      })
     }
 
     // Using socks library to create SOCKS connection
@@ -139,23 +139,23 @@ async function socksConnect(opts, proxy, lookup = false) {
       },
       command: 'connect',
       timeout: timeout ?? undefined,
-    };
+    }
 
-    log({connOpt}, 'connect');
-    const {socket} = await SocksClient.createConnection(connOpt);
+    log({connOpt}, 'connect')
+    const {socket} = await SocksClient.createConnection(connOpt)
     if (socket) {
-      R = socket;
-      log('Socks proxy connect Success.');
+      R = socket
+      log('Socks proxy connect Success.')
       if (timeout) {
-        socket.setTimeout(timeout);
-        socket.on('timeout', () => socket.destroy());
+        socket.setTimeout(timeout)
+        socket.on('timeout', () => socket.destroy())
       }
-    } else log.error('Socks proxy connect Fail.');
+    } else log.error('Socks proxy connect Fail.')
   } catch (e) {
-    log.err(e, 'socksConnect');
+    log.err(e, 'socksConnect')
   }
 
-  return R;
+  return R
 }
 
 /**
@@ -164,66 +164,66 @@ async function socksConnect(opts, proxy, lookup = false) {
  * @returns  {{lookup: boolean, proxy: Proxy}}
  */
 function parseURL(url) {
-  let R;
+  let R
   try {
-    let lookup = false;
-    const host = url.hostname;
-    const port = url.port ? Number.parseInt(url.port) : 0;
+    let lookup = false
+    const host = url.hostname
+    const port = url.port ? Number.parseInt(url.port) : 0
 
     /** @type {Proxy} */
     const proxy = {
       protocol: url.protocol,
       host,
       port,
-    };
+    }
 
     if (['http:', 'https:'].includes(url.protocol)) {
-      if (!port) proxy.port = url.protocol === 'https:' ? 443 : 80;
-      if (url.username) proxy.username = decodeURIComponent(url.username);
-      if (url.password) proxy.password = decodeURIComponent(url.password);
+      if (!port) proxy.port = url.protocol === 'https:' ? 443 : 80
+      if (url.username) proxy.username = decodeURIComponent(url.username)
+      if (url.password) proxy.password = decodeURIComponent(url.password)
     } else {
       // From RFC 1928, Section 3: https://tools.ietf.org/html/rfc1928#section-3
       // "The SOCKS service is conventionally located on TCP port 1080"
-      if (!port) proxy.port = 1080;
+      if (!port) proxy.port = 1080
 
-      let type = 5;
+      let type = 5
 
       // figure out if we want socks v4 or v5, based on the "protocol" used.
       // Defaults to 5.
       switch (url.protocol.replace(':', '')) {
         case 'socks4':
-          lookup = true;
-          type = 4;
-          break;
+          lookup = true
+          type = 4
+          break
         // pass through
         case 'socks4a':
-          type = 4;
-          break;
+          type = 4
+          break
         case 'socks5':
-          lookup = true;
-          type = 5;
-          break;
+          lookup = true
+          type = 5
+          break
         // pass through
         case 'socks': // no version specified, default to 5h
-          type = 5;
-          break;
+          type = 5
+          break
         case 'socks5h':
-          type = 5;
-          break;
+          type = 5
+          break
         default:
-          type = 5;
+          type = 5
       }
 
-      proxy.type = type;
+      proxy.type = type
     }
 
-    R = {lookup, proxy};
+    R = {lookup, proxy}
     // log({proxy}, 'parseURL')
   } catch (e) {
-    log.err(e, 'parseURL');
+    log.err(e, 'parseURL')
   }
 
-  return R;
+  return R
 }
 
 /**
@@ -234,11 +234,11 @@ function parseURL(url) {
  */
 function omit(obj, ...keys) {
   /** @type {*} */
-  const R = {};
+  const R = {}
   for (const k of Object.keys(obj)) {
-    if (!keys.includes(k)) R[k] = obj[k];
+    if (!keys.includes(k)) R[k] = obj[k]
   }
-  return R;
+  return R
 }
 
-export {parseURL, connect, socksConnect, omit};
+export {parseURL, connect, socksConnect, omit}

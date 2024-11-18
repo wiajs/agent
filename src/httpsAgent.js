@@ -1,9 +1,9 @@
-import http from 'node:http';
-import https from 'node:https';
-import {log as Log, name} from '@wiajs/log';
-import {connect, socksConnect, parseURL} from './tunnel.js';
+import http from 'node:http'
+import https from 'node:https'
+import {log as Log, name} from '@wiajs/log'
+import {connect, socksConnect, parseURL} from './tunnel.js'
 
-const log = Log({env: `wia:agent:${name(__filename)}`});
+const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
 /** @typedef {import('./tunnel').AgentConnectOpts} AgentConnectOpts */
@@ -16,41 +16,41 @@ const log = Log({env: `wia:agent:${name(__filename)}`});
  * 使用 HTTP 1.1 CONNECT 协议，通过http或https连接代理服务器，建立TLS隧道，
  */
 export default class HttpsAgent extends https.Agent {
-  static protocols = ['http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h'];
+  static protocols = ['http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h']
   /**
    * @param {AgentOpts} opts
    */
   constructor(opts) {
-    const {proxy, proxyOpts, ...opt} = opts;
-    super(opt);
+    const {proxy, proxyOpts, ...opt} = opts
+    super(opt)
 
-    if (opt.timeout) this.timeout = opt.timeout; // super(opt) 无效
-    this.opt = opt;
+    if (opt.timeout) this.timeout = opt.timeout // super(opt) 无效
+    this.opt = opt
 
-    let lookup = false;
+    let lookup = false
     /** @type {Proxy} */
-    let px;
+    let px
     if (typeof proxy === 'string')
       // let proxy = `http://${username}:${password}@${proxy_ip}:${proxy_port}`
       // let proxy = `socks5h://${username}:${password}@${proxy_ip}:${proxy_port}`
-      ({proxy: px, lookup} = parseURL(new URL(proxy)));
-    else px = proxy;
+      ({proxy: px, lookup} = parseURL(new URL(proxy)))
+    else px = proxy
 
-    this.lookup = lookup;
+    this.lookup = lookup
 
     if (px) {
       // Trim off the brackets from IPv6 addresses
-      px.host = px.host.replace(/^\[|\]$/g, '');
+      px.host = px.host.replace(/^\[|\]$/g, '')
       if (!px.port) {
-        if (px.protocol === 'https:') px.port = 443;
-        else if (px.protocol === 'http:') px.port = 80;
-        else px.port = 1080;
+        if (px.protocol === 'https:') px.port = 443
+        else if (px.protocol === 'http:') px.port = 80
+        else px.port = 1080
       }
-      this.proxy = px;
-      this.proxyOpts = proxyOpts || {};
-      this.tunnel = true;
-      log('Create HttpsAgent proxy :%o', this.proxy);
-    } else log.error('Create HttpsAgent error, not found proxy!');
+      this.proxy = px
+      this.proxyOpts = proxyOpts || {}
+      this.tunnel = true
+      log('Create HttpsAgent proxy :%o', this.proxy)
+    } else log.error('Create HttpsAgent error, not found proxy!')
   }
 
   /**
@@ -64,16 +64,16 @@ export default class HttpsAgent extends https.Agent {
    * cb(err, stream) 返回 连接socket
    */
   createConnection(opts, cb) {
-    const _ = this;
-    const {proxy, proxyOpts} = _;
+    const _ = this
+    const {proxy, proxyOpts} = _
     if (!proxy) {
       // @ts-ignore
-      const socket = super.createConnection(opts);
+      const socket = super.createConnection(opts)
       socket.once('connect', () => {
-        log('Create Https Socket Success.');
-        cb(null, socket);
-      });
-      socket.once('close', () => log('Https Socket close.'));
+        log('Create Https Socket Success.')
+        cb(null, socket)
+      })
+      socket.once('close', () => log('Https Socket close.'))
     } else {
       if (['http:', 'https:'].includes(proxy.protocol)) {
         Promise.resolve()
@@ -82,36 +82,36 @@ export default class HttpsAgent extends https.Agent {
           .then(({socket, err}) => {
             if (socket && opts.protocol === 'https:') {
               // @ts-ignore
-              const secureSocket = super.createConnection({...opts, socket});
+              const secureSocket = super.createConnection({...opts, socket})
               if (secureSocket) {
-                secureSocket?.once('close', () => log('Secure Socket close.'));
+                secureSocket?.once('close', () => log('Secure Socket close.'))
 
-                log('Create Secure Socket Success.');
-                cb(null, secureSocket);
-              } else log.error('Create Secure Socket Fail.');
-            } else if (err) cb(err, null);
+                log('Create Secure Socket Success.')
+                cb(null, secureSocket)
+              } else log.error('Create Secure Socket Fail.')
+            } else if (err) cb(err, null)
           })
           .catch(err => {
-            log.err(err);
-            cb(err);
-          });
+            log.err(err)
+            cb(err)
+          })
       } else {
         Promise.resolve()
           .then(() => socksConnect(opts, proxy, this.lookup))
           .then(socket => {
             if (socket && opts.protocol === 'https:') {
               // @ts-ignore
-              const secureSocket = super.createConnection({...opts, socket});
+              const secureSocket = super.createConnection({...opts, socket})
               if (secureSocket) {
-                log('Created secureSocket Success.');
-                cb(null, secureSocket);
-              } else log.error('Creat secureSocket Fail.');
+                log('Created secureSocket Success.')
+                cb(null, secureSocket)
+              } else log.error('Creat secureSocket Fail.')
             }
           })
           .catch(err => {
-            log.err(err, 'createConnection');
-            cb(err);
-          });
+            log.err(err, 'createConnection')
+            cb(err)
+          })
       }
     }
   }

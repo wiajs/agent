@@ -1,11 +1,11 @@
-import http from 'node:http';
-import https from 'node:https';
-import * as net from 'node:net';
-import * as tls from 'node:tls';
-import {log as Log, name} from '@wiajs/log';
-import {connect, socksConnect, parseURL, omit} from './tunnel.js';
+import http from 'node:http'
+import https from 'node:https'
+import * as net from 'node:net'
+import * as tls from 'node:tls'
+import {log as Log, name} from '@wiajs/log'
+import {connect, socksConnect, parseURL, omit} from './tunnel.js'
 
-const log = Log({env: `wia:agent:${name(__filename)}`});
+const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
 /** @typedef {import('./tunnel').AgentConnectOpts & {hostname?: string, path?: string, pathname?: string, keepAlive: boolean}} AgentConnectOpts */
@@ -52,44 +52,44 @@ const log = Log({env: `wia:agent:${name(__filename)}`});
   })
  */
 export default class HttpAgent extends http.Agent {
-  static protocols = ['http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h'];
+  static protocols = ['http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h']
   /**
    * @param {AgentOpts} opts
    */
   constructor(opts) {
-    const {proxy, proxyOpts, tunnel, ...opt} = opts;
-    super(opt);
+    const {proxy, proxyOpts, tunnel, ...opt} = opts
+    super(opt)
 
-    if (opt.timeout) this.timeout = opt.timeout; // super(opt) 无效
-    this.opt = opt;
+    if (opt.timeout) this.timeout = opt.timeout // super(opt) 无效
+    this.opt = opt
 
-    let lookup = false;
+    let lookup = false
     /** @type {Proxy} */
-    let px;
+    let px
     // let proxy = `http://${username}:${password}@${proxy_ip}:${proxy_port}`
     // let proxy = `socks5h://${username}:${password}@${proxy_ip}:${proxy_port}`
-    if (typeof proxy === 'string') ({proxy: px, lookup} = parseURL(new URL(proxy)));
-    else px = proxy;
+    if (typeof proxy === 'string') ({proxy: px, lookup} = parseURL(new URL(proxy)))
+    else px = proxy
 
-    this.lookup = lookup;
+    this.lookup = lookup
 
     if (px) {
       // Trim off the brackets from IPv6 addresses
-      px.host = px.host.replace(/^\[|\]$/g, '');
+      px.host = px.host.replace(/^\[|\]$/g, '')
       if (!px.port) {
-        if (px.protocol === 'https:') px.port = 443;
-        else if (px.protocol === 'http:') px.port = 80;
-        else px.port = 1080;
+        if (px.protocol === 'https:') px.port = 443
+        else if (px.protocol === 'http:') px.port = 80
+        else px.port = 1080
       }
-      this.proxy = px;
-      this.proxyOpts = proxyOpts || {};
+      this.proxy = px
+      this.proxyOpts = proxyOpts || {}
 
       if (['http:', 'https:'].includes(px.protocol))
         // http[s]代理，可设置隧道或转发模式，socks代理只能隧道
-        this.tunnel = tunnel ?? false;
-      else this.tunnel = true;
-      log('Create HttpAgent proxy: %o tunnel: %d', this.proxy, this.tunnel);
-    } else log.error('Create HttpAgent error, not found proxy!');
+        this.tunnel = tunnel ?? false
+      else this.tunnel = true
+      log('Create HttpAgent proxy: %o tunnel: %d', this.proxy, this.tunnel)
+    } else log.error('Create HttpAgent error, not found proxy!')
   }
 
   /**
@@ -100,23 +100,23 @@ export default class HttpAgent extends http.Agent {
    */
   addRequest(req, opts) {
     // biome-ignore lint/complexity/noUselessThisAlias: <explanation>
-    const _ = this;
-    const {proxy} = _;
+    const _ = this
+    const {proxy} = _
 
     if (proxy) {
-      let headers = req.getHeaders();
-      log({headers: {...headers}}, 'addRequest'); // 消除 [Object: null prototype]
+      let headers = req.getHeaders()
+      log({headers: {...headers}}, 'addRequest') // 消除 [Object: null prototype]
 
       // 非隧道，转发模式，修改req连接代理
       if (!_.tunnel) {
-        _.setReqProps(req, opts);
-        headers = req.getHeaders();
-        log({headers: {...headers}}, 'addRequest setReqProps');
+        _.setReqProps(req, opts)
+        headers = req.getHeaders()
+        log({headers: {...headers}}, 'addRequest setReqProps')
       }
     }
 
     // @ts-ignore
-    return super.addRequest(req, opts);
+    return super.addRequest(req, opts)
   }
 
   /**
@@ -126,49 +126,49 @@ export default class HttpAgent extends http.Agent {
    */
   setReqProps(req, opts) {
     // biome-ignore lint/complexity/noUselessThisAlias: <explanation>
-    const _ = this;
-    const {proxy} = _;
+    const _ = this
+    const {proxy} = _
 
-    if (!proxy) return;
+    if (!proxy) return
 
     // log({opts}, 'setReqProps')
-    const protocol = opts.protocol;
-    const host = req.getHeader('host') || 'localhost'; // 带端口
-    const base = `${protocol}//${host}`;
-    const url = new URL(req.path, base);
-    if (opts.port !== 80) url.port = String(opts.port);
+    const protocol = opts.protocol
+    const host = req.getHeader('host') || 'localhost' // 带端口
+    const base = `${protocol}//${host}`
+    const url = new URL(req.path, base)
+    if (opts.port !== 80) url.port = String(opts.port)
 
     // Change the `http.ClientRequest` instance's "path" field
     // to the absolute path of the URL that will be requested.
-    req.path = String(url);
-    const port = opts.port && ![80, 443].includes(opts.port) ? `:${opts.port}` : '';
-    const path2 = `${opts.protocol}//${opts.hostname}${port}${opts.pathname ?? ''}`;
-    log({path: req.path, path2}, 'setReqProps');
+    req.path = String(url)
+    const port = opts.port && ![80, 443].includes(opts.port) ? `:${opts.port}` : ''
+    const path2 = `${opts.protocol}//${opts.hostname}${port}${opts.pathname ?? ''}`
+    log({path: req.path, path2}, 'setReqProps')
 
-    req.setHeader('host', `${opts.hostname}${port}`);
+    req.setHeader('host', `${opts.hostname}${port}`)
 
-    const pxPort = proxy.port && ![80, 443].includes(proxy.port) ? `:${proxy.port}` : '';
-    req.host = `${proxy.host}${pxPort}`;
+    const pxPort = proxy.port && ![80, 443].includes(proxy.port) ? `:${proxy.port}` : ''
+    req.host = `${proxy.host}${pxPort}`
 
-    if (proxy.protocol) req.protocol = proxy.protocol.includes(':') ? proxy.protocol : `${proxy.protocol}:`;
+    if (proxy.protocol) req.protocol = proxy.protocol.includes(':') ? proxy.protocol : `${proxy.protocol}:`
 
     // 填入代理 headers
     // if (_.proxyOpts.headers) Object.keys(_.proxyOpts.headers).forEach(k => req.setHeader(k, _.proxyOpts.headers[k]))
     const headers =
-      typeof this.proxyOpts.headers === 'function' ? this.proxyOpts.headers() : {...this.proxyOpts.headers};
+      typeof this.proxyOpts.headers === 'function' ? this.proxyOpts.headers() : {...this.proxyOpts.headers}
 
     // Inject the `Proxy-Authorization` header if necessary.
     if (proxy.username || proxy.password) {
-      const auth = `${decodeURIComponent(proxy.username || '')}:${decodeURIComponent(proxy.password || '')}`;
-      headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
+      const auth = `${decodeURIComponent(proxy.username || '')}:${decodeURIComponent(proxy.password || '')}`
+      headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`
     }
 
     // req.setHeader('connection', opts.keepAlive ? 'keep-alive' : 'close')
-    headers['Proxy-Connection'] = _.opt.keepAlive ? 'Keep-Alive' : 'close';
-    headers.connection = _.opt.keepAlive ? 'Keep-Alive' : 'close';
+    headers['Proxy-Connection'] = _.opt.keepAlive ? 'Keep-Alive' : 'close'
+    headers.connection = _.opt.keepAlive ? 'Keep-Alive' : 'close'
     for (const k of Object.keys(headers)) {
-      const val = headers[k];
-      if (val) req.setHeader(k, val);
+      const val = headers[k]
+      if (val) req.setHeader(k, val)
     }
   }
 
@@ -184,16 +184,16 @@ export default class HttpAgent extends http.Agent {
    * callback (err, stream) 返回 连接socket
    */
   createConnection(opts, cb) {
-    const _ = this;
-    const {proxy, proxyOpts} = _;
+    const _ = this
+    const {proxy, proxyOpts} = _
     if (!proxy) {
       /** @type {net.Socket} */
-      const socket = net.createConnection(opts);
+      const socket = net.createConnection(opts)
       socket.once('connect', () => {
-        log('Create Http Socket Success.');
-        cb(null, socket);
-      });
-      socket.once('close', () => log('Http Socket close.'));
+        log('Create Http Socket Success.')
+        cb(null, socket)
+      })
+      socket.once('close', () => log('Http Socket close.'))
     } else {
       // 非隧道，连接代理转发
       if (!_.tunnel) {
@@ -201,26 +201,26 @@ export default class HttpAgent extends http.Agent {
           ...(proxyOpts ? omit(proxyOpts, 'headers') : null),
           host: proxy.host,
           port: proxy.port,
-        };
+        }
 
         // Create a socket connection to the proxy server.
         /** @type {net.Socket} */
-        let socket;
+        let socket
         if (proxy.protocol === 'https:') {
-          log({connOpts}, 'Creating `tls.Socket`');
-          socket = tls.connect(connOpts);
+          log({connOpts}, 'Creating `tls.Socket`')
+          socket = tls.connect(connOpts)
         } else {
-          log({connOpts}, 'Creating `net.Socket`');
+          log({connOpts}, 'Creating `net.Socket`')
           // socket = super.createConnection(connOpt)
-          socket = net.createConnection(connOpts);
+          socket = net.createConnection(connOpts)
         }
 
         socket.once('connect', () => {
-          log('Create Xfer Socket Success.');
-          cb(null, socket);
-        });
+          log('Create Xfer Socket Success.')
+          cb(null, socket)
+        })
 
-        socket.once('close', () => log('Xfer Socket close.'));
+        socket.once('close', () => log('Xfer Socket close.'))
       } else {
         // HttpAgent隧道模式，只支持 http目标网址，https网址请使用 httpsAgent
         if (['http:', 'https:'].includes(proxy.protocol)) {
@@ -228,38 +228,38 @@ export default class HttpAgent extends http.Agent {
             .then(() => connect(opts, this.proxy, this.proxyOpts))
             // @ts-ignore
             .then(({socket, err}) => {
-              socket?.once('close', () => log('Tunnel Socket close.'));
+              socket?.once('close', () => log('Tunnel Socket close.'))
               if (socket && opts.protocol === 'http:') {
-                log('Create Tunnel Socket Success.');
-                cb(null, socket);
+                log('Create Tunnel Socket Success.')
+                cb(null, socket)
               } else if (socket) {
-                socket.destroy();
-                log.error('Create Tunnel Socket Success, protocol not http.');
-                cb(new Error('Bad Protocol.'), null);
+                socket.destroy()
+                log.error('Create Tunnel Socket Success, protocol not http.')
+                cb(new Error('Bad Protocol.'), null)
               } else if (err) {
-                log.error('Create Tunnel Socket Fail.');
-                cb(err, null);
+                log.error('Create Tunnel Socket Fail.')
+                cb(err, null)
               }
             })
             .catch(err => {
-              log.err(err, 'createConnection');
-              cb(err, null);
-            });
+              log.err(err, 'createConnection')
+              cb(err, null)
+            })
         } else {
-          const px = {...omit(proxy, 'username', 'protocol')};
+          const px = {...omit(proxy, 'username', 'protocol')}
 
           Promise.resolve()
             .then(() => socksConnect(opts, px, this.lookup))
             .then(socket => {
               if (socket) {
-                log('Created Socket Success.');
-                cb(null, socket);
-              } else log.error('Creat Socket Fail.');
+                log('Created Socket Success.')
+                cb(null, socket)
+              } else log.error('Creat Socket Fail.')
             })
             .catch(err => {
-              log.err(err, 'createConnection');
-              cb(err);
-            });
+              log.err(err, 'createConnection')
+              cb(err)
+            })
         }
       }
     }
