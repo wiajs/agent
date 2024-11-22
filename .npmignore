@@ -1,9 +1,11 @@
 **/*
 !/dist/**
 !/lib/**
+!/types/**
 !index.js
 !index.d.ts
 !index.d.cts
 !CHANGELOG.md
 !LICENSE
 !README.md
+s

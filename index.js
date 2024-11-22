@@ -1,1 +1,1 @@
-export {default, HttpAgent, HttpsAgent} from './lib/index.js'
+export {Agent, HttpAgent, HttpsAgent} from './lib/index.js'

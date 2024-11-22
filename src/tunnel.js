@@ -9,8 +9,8 @@ import {SocksClient} from 'socks'
 const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
-/** @typedef {{protocol?: string, keepAlive: boolean} & import('net').TcpNetConnectOpts} HttpConnectOpts */
-/** @typedef {{servername?:string, protocol?: string, port: number, keepAlive: boolean} & import('tls').ConnectionOptions} HttpsConnectOpts */
+/** @typedef {{protocol?: string, keepAlive: boolean, lookup: dns.lookup} & import('net').TcpNetConnectOpts} HttpConnectOpts */
+/** @typedef {{servername?:string, protocol?: string, port: number, keepAlive: boolean, lookup: dns.lookup} & import('tls').ConnectionOptions} HttpsConnectOpts */
 /** @typedef {HttpConnectOpts | HttpsConnectOpts} AgentConnectOpts */
 /** @typedef {{protocol: string, host: string, port: number, type?: number, username?: string, userId?: string, password?: string}} Proxy */
 
@@ -101,32 +101,50 @@ async function connect(opts, proxy, proxyOpts) {
 }
 
 /**
+ * 解析域名为ip地址
+ * @param {string} host
+ * @param {dns.lookup} lookupFn
+ * @returns {Promise<string>}
+ */
+async function lookup(host, lookupFn) {
+  let R
+  try {
+    R = new Promise((res, rej) => {
+      // Use the request's custom lookup, if one was configured:
+      lookupFn(host, {}, (err, addr, family) => {
+        if (err) rej(err)
+        else res(addr)
+      })
+    })
+
+    log({R}, 'lookup')
+  } catch (e) {
+    log.err(e, 'lookup')
+  }
+  return R
+}
+
+/**
  * 通过 socks 创建隧道代理连接
  * @param {AgentConnectOpts} opts
  * @param {Proxy} proxy
- * @param {boolean} [lookup=false]
+ * @param {boolean} [shouldLookup=false]
  * @returns {Promise<net.Socket | tls.TLSSocket>}
  */
-async function socksConnect(opts, proxy, lookup = false) {
+async function socksConnect(opts, proxy, shouldLookup = false) {
   let R
   try {
     const {timeout} = opts
     let {host, port} = opts
+
+    if (!host) throw new Error('No `host` defined!')
+
     port = typeof port === 'number' ? port : Number.parseInt(port)
     const {lookup: lookupFn = dns.lookup} = opts
 
-    if (lookup) {
+    if (shouldLookup) {
       // Client-side DNS resolution for "4" and "5" socks proxy versions.
-      host = await new Promise((resolve, reject) => {
-        // Use the request's custom lookup, if one was configured:
-        lookupFn(host, {}, (err, res) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve(res)
-          }
-        })
-      })
+      host = await lookup(host, lookupFn)
     }
 
     // Using socks library to create SOCKS connection

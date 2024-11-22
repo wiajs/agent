@@ -10,7 +10,7 @@ import replace from '@rollup/plugin-replace' // 替换待打包文件里的一�
 
 import {getJsOpt, getTsOpt} from './swc.js'
 
-import pkg from '../package.json' assert {type: 'json'}
+import pkg from '../package.json' with {type: 'json'}
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
@@ -44,21 +44,17 @@ const external = [
   /@babel\/runtime/, // babel helpers  @babel/runtime-corejs3/
 ]
 
+/**
+ * 仅支持node，不支持browser
+ * 仅生成cjs，esm直接引用代码，代码为 esm格式
+ */
 const configs = [
-  // browser dev
   {
     input,
     file: dir('dist/agent.cjs'), // cjs格式，后端打包，保留引用
     format: 'cjs',
-    browser: false,
-    external,
-  },
-  {
-    input,
-    file: dir('dist/agent.mjs'), // esm格式，后端打包，保留引用
-    format: 'esm',
-    exports: 'named', // 名称方式输出各个子模块
-    browser: false,
+    exports: 'named', // named 以独立名称输出各子模块, default 整体输出，混合输出时__esModule为true
+    browser: false, // 不支持浏览器
     external,
   },
 ].map(genConfig)
