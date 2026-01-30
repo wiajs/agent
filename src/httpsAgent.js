@@ -1,17 +1,18 @@
-import http from 'node:http'
-import https from 'node:https'
-import {log as Log, name} from '@wiajs/log'
-import {connect, socksConnect, parseURL} from './tunnel.js'
+import { log as Log, name } from '@wiajs/log'
+import http from 'http'
+import https from 'https'
+import { connect, parseURL, socksConnect } from './tunnel.js'
 
 const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
 /** @typedef {import('./tunnel').AgentConnectOpts} AgentConnectOpts */
 /** @typedef {import('./tunnel').Proxy} Proxy */
-/** @typedef {http.AgentOptions & https.AgentOptions & {proxy: string|Proxy, proxyOpts?: *, tunnel?: boolean}} AgentOpts */
+/** @typedef {http.AgentOptions & https.AgentOptions & {proxy?: string|Proxy, proxyOpts?: *, tunnel?: boolean}} AgentOpts */
 
 /**
- * 隧道代理，实现HTTPS目的网址访问
+ * 目标网址HTTPS访问代理，支持http、https、socks、socks5, socks5h
+ * 转发不安全，推荐使用隧道
  * 重写 https.Agent的createConnection
  * 使用 HTTP 1.1 CONNECT 协议，通过http或https连接代理服务器，建立TLS隧道，
  */
@@ -25,7 +26,10 @@ export default class HttpsAgent extends https.Agent {
     super(opt)
 
     if (opt.timeout) this.timeout = opt.timeout // super(opt) 无效
+    // 保存构造函数参数，包含 rejectUnauthorized 等关键 TLS 配置
     this.opt = opt
+
+    // console.error({opt}, 'HttpsAgent Constructor')
 
     let lookup = false
     /** @type {Proxy} */
@@ -49,8 +53,34 @@ export default class HttpsAgent extends https.Agent {
       this.proxy = px
       this.proxyOpts = proxyOpts || {}
       this.tunnel = true
-      log('Create HttpsAgent proxy :%o', this.proxy)
-    } else log.error('Create HttpsAgent error, not found proxy!')
+      log({proxy: px, proxyOpts, tunnel: true}, 'Create HttpsAgent')
+    }
+  }
+
+  /**
+   * [新增] 显式重写 addRequest
+   * 作用：
+   * 1. 确认 https.request 是否真的使用了这个 Agent
+   * 2. 确保将合并后的参数传递给父类，防止父类因缺少参数而不调用 createConnection
+   * @param {*} req
+   * @param {AgentConnectOpts} opts
+   */
+  addRequest(req, opts) {
+    // 调试日志：确认 Agent 入口被调用
+    // console.log('HttpsAgent addRequest called', { optsHost: opts.host, optsPort: opts.port })
+    log({opts}, 'HttpsAgent addRequest')
+
+    const _ = this
+
+    // 关键：在这里合并配置，确保 rejectUnauthorized 等安全配置传入底层逻辑
+    // 虽然 createConnection 里也合并了，但 addRequest 里的合并能影响连接池 Key 的生成
+    const combinedOpts = {..._.opt, ...opts}
+
+    // 如果设置了代理，且非隧道模式（虽然 HttpsAgent 主要是隧道），可以在这里像 HttpAgent 一样处理 Header
+    // 但对于 HttpsAgent，最重要的是确保 super.addRequest 被正确调用
+
+    // @ts-ignore
+    return super.addRequest(req, combinedOpts)
   }
 
   /**
@@ -64,25 +94,49 @@ export default class HttpsAgent extends https.Agent {
    * cb(err, stream) 返回 连接socket
    */
   createConnection(opts, cb) {
+    console.log('HttpsAgent createConnection called') // 调试日志
     const _ = this
     const {proxy, proxyOpts} = _
+    let {opt} = _
+
+    console.log({opt, opts, proxy, proxyOpts}, 'createConnection')
+
     if (!proxy) {
+      // [FIX] 关键修复：合并 this.opt (包含 rejectUnauthorized) 与当前请求 opts
+      // opts 中的 host/port 会覆盖 this.opt 中的默认值，但安全配置会保留
+      opt = {...opt, ...opts}
+
       // @ts-ignore
-      const socket = super.createConnection(opts)
+      const socket = super.createConnection(opt)
+
       socket.once('connect', () => {
         log('Create Https Socket Success.')
         cb(null, socket)
       })
+
+      // 建议：如果不需要特定的 connect 监听，也可以直接返回 socket，遵循标准 Agent 行为
+      // 但为了保持原有逻辑风格，此处保留。
+      // 注意：处理一下 error 事件，防止 TLS 握手失败（如证书错误）时无响应
+      socket.once('error', err => {
+        // 防止 uncaughtException，虽然外部 request 也会监听，但在此处处理更稳健
+        log.err(err, 'Https Socket Error')
+      })
+
       socket.once('close', () => log('Https Socket close.'))
+
+      // 必须返回 socket 实例（虽然使用了 cb，但标准接口通常也期望返回 socket）
+      return socket
     } else {
+      // 代理模式逻辑
       if (['http:', 'https:'].includes(proxy.protocol)) {
         Promise.resolve()
           .then(() => connect(opts, proxy, proxyOpts))
           // @ts-ignore
           .then(({socket, err}) => {
             if (socket && opts.protocol === 'https:') {
+              // [FIX] 关键修复：代理建立后的 TLS 握手同样需要合并 this.opt
               // @ts-ignore
-              const secureSocket = super.createConnection({...opts, socket})
+              const secureSocket = super.createConnection({...this.opt, ...opts, socket})
               if (secureSocket) {
                 secureSocket?.once('close', () => log('Secure Socket close.'))
 
@@ -100,8 +154,9 @@ export default class HttpsAgent extends https.Agent {
           .then(() => socksConnect(opts, proxy, this.lookup))
           .then(socket => {
             if (socket && opts.protocol === 'https:') {
+              // [FIX] 关键修复：SOCKS 代理后的 TLS 握手同样需要合并 this.opt
               // @ts-ignore
-              const secureSocket = super.createConnection({...opts, socket})
+              const secureSocket = super.createConnection({...this.opt, ...opts, socket})
               if (secureSocket) {
                 log('Created secureSocket Success.')
                 cb(null, secureSocket)

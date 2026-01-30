@@ -1,14 +1,13 @@
 /* eslint-disable import/no-extraneous-dependencies */
-import path from 'node:path'
-import {builtinModules} from 'node:module' // node 内部库
-import {fileURLToPath} from 'node:url'
-// import babel from '@rollup/plugin-babel'; // 编译转换ES6语法
-import swc from '@rollup/plugin-swc' // 编译转换ES6语法
 import commonjs from '@rollup/plugin-commonjs' // CommonJS 模块转换成 ES6
 import resolve from '@rollup/plugin-node-resolve' // 导入node_modules 中的 CommonJS 模块
 import replace from '@rollup/plugin-replace' // 替换待打包文件里的一些变量，如 process在浏览器端是不存在的，需要被替换
+import swc from '@rollup/plugin-swc' // 编译转换ES6语法
+import {builtinModules} from 'module' // node 内部库
+import path from 'path'
+import {fileURLToPath} from 'url'
 
-import {getJsOpt, getTsOpt} from './swc.js'
+import {getJsOpt} from './swc.js'
 
 import pkg from '../package.json' with {type: 'json'}
 
@@ -56,6 +55,7 @@ const configs = [
     exports: 'named', // named 以独立名称输出各子模块, default 整体输出，混合输出时__esModule为true
     browser: false, // 不支持浏览器
     external,
+    es6: true, // swc 转换代码到 es2015，避免node版本过低代码不兼容
   },
 ].map(genConfig)
 
@@ -65,7 +65,7 @@ const configs = [
  * @param {*} param0
  * @returns
  */
-function genConfig({input, browser = true, es5 = false, ...cfg}) {
+function genConfig({input, browser = true, es6 = true, ...cfg}) {
   const config = {
     input: {
       input,
@@ -74,7 +74,6 @@ function genConfig({input, browser = true, es5 = false, ...cfg}) {
       plugins: [
         // node_modules 中超ES6已转换为ES6
         resolve({browser}), // 从 node_modules 合并文件，pkg的browser文件替换 mainFields: ['browser']
-        commonjs(), // common 转换为 es6，rollup 只支持 es6
         // 替换特定字符串
         replace({
           preventAssignment: true, // 避免赋值替换  xxx = false -> false = false
@@ -84,9 +83,9 @@ function genConfig({input, browser = true, es5 = false, ...cfg}) {
           __VERSION__: version,
         }),
         // 根据需要，将es6 转换为 es5，兼容所有浏览器，依赖@babel/runtime-corejs3 polyfill
-        es5 && //swc(), // eslint-disable-line
-          swc({swc: getJsOpt(false, false)}),
-        // swc({swc: {jsc: {target: 'es5'}}}),
+        es6 && swc({swc: getJsOpt(false, false)}),
+        // 最后再把三方 CJS 转成 ESM 给 Rollup
+        commonjs(), // common 转换为 es6，rollup 只支持 es6
       ],
     },
     output: {

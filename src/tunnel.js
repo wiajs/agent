@@ -1,10 +1,10 @@
-import * as dns from 'node:dns'
-import https from 'node:https'
-import http from 'node:http'
-import * as net from 'node:net'
-import * as tls from 'node:tls'
 import {log as Log, name} from '@wiajs/log'
+import * as dns from 'dns'
+import http from 'http'
+import https from 'https'
+import * as net from 'net'
 import {SocksClient} from 'socks'
+import * as tls from 'tls'
 
 const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
@@ -38,7 +38,7 @@ async function connect(opts, proxy, proxyOpts) {
       path: `${opts.host}:${opts.port}`,
       setHost: false,
       headers: {
-        ...proxyOpts?.headers,
+        ...(proxyOpts?.headers || {}),
         connection: opts.keepAlive ? 'keep-alive' : 'close',
         'Proxy-Connection': opts.keepAlive ? 'keep-alive' : 'close',
         host: `${opts.host}:${opts.port}`,
@@ -159,7 +159,8 @@ async function socksConnect(opts, proxy, shouldLookup = false) {
       timeout: timeout ?? undefined,
     }
 
-    log({connOpt}, 'connect')
+    log({connOpt}, 'socksConnect')
+
     const {socket} = await SocksClient.createConnection(connOpt)
     if (socket) {
       R = socket
@@ -195,10 +196,15 @@ function parseURL(url) {
       port,
     }
 
+    if (url.username) {
+      proxy.username = decodeURIComponent(url.username)
+      proxy.userId = decodeURIComponent(url.username)
+    }
+
+    if (url.password) proxy.password = decodeURIComponent(url.password)
+
     if (['http:', 'https:'].includes(url.protocol)) {
       if (!port) proxy.port = url.protocol === 'https:' ? 443 : 80
-      if (url.username) proxy.username = decodeURIComponent(url.username)
-      if (url.password) proxy.password = decodeURIComponent(url.password)
     } else {
       // From RFC 1928, Section 3: https://tools.ietf.org/html/rfc1928#section-3
       // "The SOCKS service is conventionally located on TCP port 1080"
@@ -236,7 +242,7 @@ function parseURL(url) {
     }
 
     R = {lookup, proxy}
-    // log({proxy}, 'parseURL')
+    // log({url, proxy}, 'parseURL')
   } catch (e) {
     log.err(e, 'parseURL')
   }
@@ -259,4 +265,4 @@ function omit(obj, ...keys) {
   return R
 }
 
-export {parseURL, connect, socksConnect, omit}
+export {connect, omit, parseURL, socksConnect}

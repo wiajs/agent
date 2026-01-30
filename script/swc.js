@@ -31,13 +31,16 @@ const getOpt = (dev = false, cli = false) => {
         },
       },
       loose: true,
-      target: 'es2022', // es5,es6,es2020,es2021,es2022
+      target: 'es2018', // es5,es2015,es2020,es2021,es2022 支持 node 13
       externalHelpers: false,
       keepClassNames: true, // 保留原始类名
     },
+    module: {
+      type: 'es6', // 输出模块类型 es6 commonjs，rollup打包，swc不转换模块
+    },
     minify: false, // 压缩代码
     sourceMaps: false,
-  };
+  }
 
   // 输出cjs，避免服务端拆分成chunks
   if (!cli) {
@@ -63,21 +66,21 @@ const getOpt = (dev = false, cli = false) => {
     };
   }
  */
-  return opt;
-};
+  return opt
+}
 
 function getJsOpt(dev = false, cli = false) {
-  const opt = getOpt(dev, cli);
-  opt.jsc.parser.syntax = 'ecmascript';
-  opt.jsc.parser.jsx = true;
-  return opt;
+  const opt = getOpt(dev, cli)
+  opt.jsc.parser.syntax = 'ecmascript'
+  opt.jsc.parser.jsx = true
+  return opt
 }
 
 const getTsOpt = (dev = false, cli = false) => {
-  const opt = getOpt(dev, cli);
-  opt.jsc.parser.syntax = 'typescript';
-  opt.jsc.parser.tsx = true;
-  return opt;
-};
+  const opt = getOpt(dev, cli)
+  opt.jsc.parser.syntax = 'typescript'
+  opt.jsc.parser.tsx = true
+  return opt
+}
 
-export {getTsOpt, getJsOpt};
+export {getJsOpt, getTsOpt}

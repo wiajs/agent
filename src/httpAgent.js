@@ -1,22 +1,22 @@
-import http from 'node:http'
-import https from 'node:https'
-import * as net from 'node:net'
-import * as tls from 'node:tls'
-import {log as Log, name} from '@wiajs/log'
-import {connect, socksConnect, parseURL, omit} from './tunnel.js'
+import { log as Log, name } from '@wiajs/log'
+import http from 'http'
+import https from 'https'
+import * as net from 'net'
+import * as tls from 'tls'
+import { connect, omit, parseURL, socksConnect } from './tunnel.js'
 
 const log = Log({env: `wia:agent:${name(import.meta.url)}`})
 
 /** @typedef {import('stream').Duplex} Duplex */
 /** @typedef {import('./tunnel').AgentConnectOpts & {hostname?: string, path?: string, pathname?: string, keepAlive: boolean}} AgentConnectOpts */
 /** @typedef {import('./tunnel').Proxy} Proxy */
-/** @typedef {http.AgentOptions & https.AgentOptions & {proxy: string|Proxy, proxyOpts?: *, tunnel?: boolean}} AgentOpts */
+/** @typedef {http.AgentOptions & https.AgentOptions & {proxy?: string|Proxy, proxyOpts?: *, tunnel?: boolean}} AgentOpts */
 
 /**
- * 目的网址为http的转发或隧道代理
+ * 目标网址为http的转发或隧道代理，支持http、https、socks、socks5, socks5h
  * 转发：由代理服务器访问目的网址，将结果返回，代理服务器能获得所有内容，不安全
  * http 通过 tunnel = true 支持隧道，由于http本身明文，隧道也不安全，比转发稍微安全而已
- * https 请使用 httpsAgent
+ * 目标https 请使用 httpsAgent
  * 代理服务器http或https均支持，https安全，但代理效率低
  * 重写 http.Agent的addRequest
  *  host    : proxyIp, // 替换为代理地址
@@ -89,7 +89,7 @@ export default class HttpAgent extends http.Agent {
         this.tunnel = tunnel ?? false
       else this.tunnel = true
       log('Create HttpAgent proxy: %o tunnel: %d', this.proxy, this.tunnel)
-    } else log.error('Create HttpAgent error, not found proxy!')
+    }
   }
 
   /**
@@ -150,12 +150,15 @@ export default class HttpAgent extends http.Agent {
     const pxPort = proxy.port && ![80, 443].includes(proxy.port) ? `:${proxy.port}` : ''
     req.host = `${proxy.host}${pxPort}`
 
-    if (proxy.protocol) req.protocol = proxy.protocol.includes(':') ? proxy.protocol : `${proxy.protocol}:`
+    if (proxy.protocol)
+      req.protocol = proxy.protocol.includes(':') ? proxy.protocol : `${proxy.protocol}:`
 
     // 填入代理 headers
     // if (_.proxyOpts.headers) Object.keys(_.proxyOpts.headers).forEach(k => req.setHeader(k, _.proxyOpts.headers[k]))
     const headers =
-      typeof this.proxyOpts.headers === 'function' ? this.proxyOpts.headers() : {...this.proxyOpts.headers}
+      typeof this.proxyOpts.headers === 'function'
+        ? this.proxyOpts.headers()
+        : {...this.proxyOpts.headers}
 
     // Inject the `Proxy-Authorization` header if necessary.
     if (proxy.username || proxy.password) {
@@ -186,31 +189,50 @@ export default class HttpAgent extends http.Agent {
   createConnection(opts, cb) {
     const _ = this
     const {proxy, proxyOpts} = _
+
+    log({proxy, proxyOpts}, 'createConnection')
+
     if (!proxy) {
+      // [FIX] 关键修正：合并配置，确保 timeout, localAddress 等参数生效
+      const opt = { ...this.opt, ...opts }
       /** @type {net.Socket} */
-      const socket = net.createConnection(opts)
+      const socket = net.createConnection(opt)
+      
       socket.once('connect', () => {
         log('Create Http Socket Success.')
         cb(null, socket)
       })
+      // 错误处理，防止未捕获异常
+      socket.once('error', (err) => {
+        log.err(err, 'Http Socket Error')
+        // 如果 socket 还没建立就出错，cb 可能需要被调用（取决于调用方），但通常 socket error 会冒泡
+      })
       socket.once('close', () => log('Http Socket close.'))
+      
+      // [FIX] 关键修正：必须返回 socket
+      return socket
     } else {
       // 非隧道，连接代理转发
       if (!_.tunnel) {
         const connOpts = {
+           // [FIX] 合并 this.opt 以支持 SSL 配置（如连接 HTTPS 代理时忽略证书错误）
+          ...this.opt, 
           ...(proxyOpts ? omit(proxyOpts, 'headers') : null),
           host: proxy.host,
           port: proxy.port,
+          // 如果代理是 HTTPS，指定 servername 确保 SNI 正确
+          servername: proxy.protocol === 'https:' ? proxy.host : undefined
         }
 
         // Create a socket connection to the proxy server.
         /** @type {net.Socket} */
         let socket
         if (proxy.protocol === 'https:') {
-          log({connOpts}, 'Creating `tls.Socket`')
+          log({connOpts}, 'Creating `tls.Socket` for Proxy')
+          // [FIX] 使用合并后的 connOpts，包含 rejectUnauthorized 等
           socket = tls.connect(connOpts)
         } else {
-          log({connOpts}, 'Creating `net.Socket`')
+          log({connOpts}, 'Creating `net.Socket` for Proxy')
           // socket = super.createConnection(connOpt)
           socket = net.createConnection(connOpts)
         }
@@ -220,25 +242,37 @@ export default class HttpAgent extends http.Agent {
           cb(null, socket)
         })
 
+        socket.once('error', (err) => {
+          log.err(err, 'Xfer Socket Error')
+          cb(err)
+        })
+
         socket.once('close', () => log('Xfer Socket close.'))
+        
+        return socket
       } else {
         // HttpAgent隧道模式，只支持 http目标网址，https网址请使用 httpsAgent
         if (['http:', 'https:'].includes(proxy.protocol)) {
           Promise.resolve()
+            // connect 内部实现需要确保处理了 proxyOpts
             .then(() => connect(opts, this.proxy, this.proxyOpts))
             // @ts-ignore
             .then(({socket, err}) => {
-              socket?.once('close', () => log('Tunnel Socket close.'))
-              if (socket && opts.protocol === 'http:') {
+              if (socket) {
+                socket.once('close', () => log('Tunnel Socket close.'))
+                // HTTP 代理连接成功，对于 HttpAgent 来说，socket 就是明文 TCP 流
+                // 不需要像 HttpsAgent 那样再做一次 TLS 握手
+                if (opts.protocol === 'http:') {
                 log('Create Tunnel Socket Success.')
                 cb(null, socket)
-              } else if (socket) {
+                } else {
+                   // 理论上 HttpAgent 不应处理 https 协议，但做个防御性编程
                 socket.destroy()
-                log.error('Create Tunnel Socket Success, protocol not http.')
-                cb(new Error('Bad Protocol.'), null)
-              } else if (err) {
-                log.error('Create Tunnel Socket Fail.')
-                cb(err, null)
+                   cb(new Error('HttpAgent does not support HTTPS protocol in tunnel mode.'), null)
+                }
+              } else {
+                log.error('Create Tunnel Socket Fail.', err)
+                cb(err || new Error('Tunnel connection failed'), null)
               }
             })
             .catch(err => {
@@ -246,15 +280,18 @@ export default class HttpAgent extends http.Agent {
               cb(err, null)
             })
         } else {
+          // SOCKS 代理
           const px = {...omit(proxy, 'username', 'protocol')}
-
           Promise.resolve()
             .then(() => socksConnect(opts, px, this.lookup))
             .then(socket => {
               if (socket) {
-                log('Created Socket Success.')
+                log('Created Socks Socket Success.')
                 cb(null, socket)
-              } else log.error('Creat Socket Fail.')
+              } else {
+                log.error('Creat Socks Socket Fail.')
+                cb(new Error('Socks connection failed'), null)
+              }
             })
             .catch(err => {
               log.err(err, 'createConnection')

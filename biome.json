@@ -36,7 +36,8 @@
 				"noForEach": "warn",
 				"noStaticOnlyClass": "warn",
 				"noUselessSwitchCase": "error",
-				"useFlatMap": "error"
+        "useFlatMap": "error",
+        "noUselessThisAlias": "off"
 			}
 		}
 	}

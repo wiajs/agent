@@ -1,7 +1,7 @@
-import http from 'node:http'
-import https from 'node:https'
-import HttpsAgent from './httpsAgent.js'
+import http from 'http'
+import https from 'https'
 import HttpAgent from './httpAgent.js'
+import HttpsAgent from './httpsAgent.js'
 
 /** @typedef {import('./tunnel.js').Proxy} Proxy */
 /** @typedef {http.AgentOptions & https.AgentOptions & {proxy: string|Proxy, proxyOpts?: *, tunnel?: boolean}} AgentOpts */

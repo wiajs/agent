@@ -1,7 +1,7 @@
 {
   "name": "@wiajs/agent",
-  "description": "http/https/socks/tunnel/transfer's proxy agent",
-  "version": "1.0.21",
+  "description": "http/https/socks agent",
+  "version": "1.0.30",
   "type": "module",
   "main": "index.js",
   "types": "types/index.d.ts",
@@ -19,7 +19,6 @@
   },
   "scripts": {
     "build": "cross-env NODE_ENV=production gulp build -f gulpfile.js",
-    "lib": "swc --config-file ./.swcrc ./src -d lib -w --strip-leading-paths",
     "lint": "xo",
     "test": "npm run test:node && npm run test:browser && npm run lint",
     "test:node": "istanbul cover _mocha -- test.js test.node.js",
@@ -56,6 +55,6 @@
   "devDependencies": {},
   "peerDependenciesMeta": {},
   "engines": {
-    "node": ">= 14"
+    "node": ">= 13.0"
   }
 }
